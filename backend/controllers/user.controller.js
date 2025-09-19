@@ -1,5 +1,11 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+import dotenv from "dotenv";
+dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET;
 // Register a new user
 const registerUser = async (req, res) => {
   const { email, password } = req.body;
@@ -8,14 +14,17 @@ const registerUser = async (req, res) => {
     if (user) {
       return res.status(400).json({ message: "User already exists" });
     }
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "7d" });
+
     user = new User({
       email,
       password: hashedPassword,
     });
     await user.save();
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ message: "User registered successfully", token });
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server error");
@@ -33,7 +42,8 @@ const loginUser = async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
-    res.status(200).json({ message: "Login successful" });
+    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "7d" });
+    res.status(200).json({ message: "Login successful", token });
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server error");

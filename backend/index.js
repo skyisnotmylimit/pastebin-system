@@ -6,7 +6,7 @@ import cors from "cors";
 import pasteRoutes from "./routes/paste.routes.js";
 import userRoutes from "./routes/user.routes.js";
 const app = express();
-const bucketName = process.env.AWS_BUCKET_NAME || "pastebin-system-bucket";
+
 app.use(express.json());
 app.use(cors());
 
