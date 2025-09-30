@@ -45,12 +45,27 @@ const PasteView: React.FC = () => {
   }, [hash]);
 
   const getPresignedUrl = async (hash: string): Promise<string> => {
-    const serverUrl = `http://localhost:8080/api/pastes/${hash}`;
-    const response = await axios.get(serverUrl);
-    if (response.status !== 200) {
-      setError(response.data.error);
+    try {
+      // First try without token
+      const response = await publicApi.get(`/pastes/${hash}`);
+      return response.data.getUrl;
+    } catch (err: any) {
+      // If unauthorized, retry with token silently
+      if (err.response?.status === 401) {
+        try {
+          const privateResponse = await privateApi.get(`/pastes/${hash}`);
+          return privateResponse.data.getUrl;
+        } catch (innerErr: any) {
+          // Only log/throw the second failure
+          setError(innerErr.response?.data?.error || "Unexpected error");
+          throw innerErr;
+        }
+      }
+
+      // For all other errors, handle normally
+      setError(err.response?.data?.error || "Unexpected error");
+      throw err;
     }
-    return response.data.getUrl;
   };
 
   const handleCopy = async () => {

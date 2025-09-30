@@ -3,8 +3,10 @@ dotenv.config({ path: "backend/.env" });
 import Paste from "../models/Paste.js";
 import User from "../models/User.js";
 import generateHash from "../utils/generateHash.js";
-import { presignedGetUrl, presignedPutUrl } from "../utils/presignedUrls.js";
+import { presignedGetUrl, presignedPutUrl } from "../services/aws/s3Service.js";
 import jwt from "jsonwebtoken";
+import { addSendEmailJob, addDeletePasteJob } from "../queues/producer.js";
+import { createInvitationEmail } from "../utils/createEmail.js";
 
 const bucketName = process.env.AWS_BUCKET_NAME || "pastebin-system-bucket";
 
@@ -71,9 +73,22 @@ const createPaste = async (req, res) => {
       accessList: inviteList || [],
       isPrivate,
     });
-
+    if (isPrivate && inviteList && inviteList.length > 0) {
+      for (const email of inviteList) {
+        try {
+          const recievedFrom = user ? user.email : process.env.APP_USERNAME;
+          const sendTo = email;
+          const mailOptions = createInvitationEmail(sendTo, recievedFrom, hash);
+          await addSendEmailJob(mailOptions);
+        } catch (err) {
+          console.error(`Failed to add email job for ${email}:`, err);
+        }
+      }
+    }
+    if (expiresAt) {
+      await addDeletePasteJob(hash, expiresAt);
+    }
     await newPaste.save();
-
     return res.status(201).json({ putUrl, hash });
   } catch (error) {
     console.error("Error creating paste:", error);
@@ -102,7 +117,11 @@ const getPaste = async (req, res) => {
           if (!user) {
             return res.status(404).json({ error: "User not found" });
           }
-          if (!paste.accessList.includes(user.email)) {
+          if (
+            !paste.accessList.includes(user.email) &&
+            paste.author &&
+            !paste.author.equals(user._id)
+          ) {
             return res.status(403).json({
               error: "Forbidden: You do not have access to this paste",
             });
